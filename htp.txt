@@ -1,0 +1,1 @@
+g++ -std=c++11 iot.cpp i.cpp o.cpp t.cpp util.cpp -o iot 

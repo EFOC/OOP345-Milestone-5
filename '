@@ -1,0 +1,274 @@
+#include<iostream>
+#include<vector>
+#include<fstream>
+#include<string>
+#include<algorithm>
+#include"util.h"
+#include"i.h"
+#include"o.h"
+#include "t.h"
+#include"machine.h"
+
+using namespace std;
+
+class factory{
+	vector<Machine>machineList;
+	public:
+	factory(ItemManager& im, OrderManager& om, TaskManager& tm)
+	{
+		srand(time(0));
+
+		for(size_t count = 0; count < tm.size(); count++){
+			machineList.push_back(move(Machine(tm.getTask(count))));
+		}
+
+		int l = 0;
+	
+		auto FindMachine =[&](string m) -> Machine* {
+			for(size_t i = 0; i < machineList.size(); i++){
+				if(machineList[i].getTaskName() == m){
+					return &machineList[i];
+				}
+				return nullptr;
+			}
+		};
+
+		for(auto m : machineList){
+			string p = m.getTaskPass();
+			if(!p.empty()){
+				FindMachine(p) -> incComing();
+			}
+
+			string f = m.getTaskfail();
+			if(!f.empty()){
+				FindMachine(f)->incComing();
+			}
+		}
+		int source = -1;
+		for(size_t i = 0; i < machineList.size(); i++){
+			cout << i << ": " << machineList[i].getTaskName();
+		       if(machineList[i].isSingleton()){
+		       	cout << "SINGLETON" << endl;
+		       }else{
+			if(machineList[i].isSource()){
+		       	cout << "SOURCE" << endl;
+			if(source == -1){
+				source = i;
+			}else{
+				throw string(" more than 1 sources");
+			}
+		       }
+			if(machineList[i].isSink()){
+				cout << "SINK" << endl;
+			}
+		       }
+		}
+		
+		cout << "Source: " << source << endl;
+		if(source == -1){
+			throw string("There is no source");
+		}
+	
+		for(size_t i = 0; i < om.getSize(); i++){
+			machineList[source].addJob(Job(om.getOrder(i)));
+		}
+
+		for(auto r : machineList){
+			cout << r.getTaskName() << " have " << r.inputSize() << " jobs" << endl;
+		}
+
+		for(auto &r : machineList){
+		r.Classify(im);
+		}
+
+		int time = 0;
+		while(true){
+			cout << "Time is: " << time << endl;
+		
+	
+		bool done = true;
+
+		for(auto r : machineList){
+			if(r.inputSize()){
+				done = false;
+				break;
+			}
+		}
+
+		if(done){
+			cout << "it is correct" << endl;
+			break;
+		}
+
+		for(auto &r : machineList){
+			if(r.inputSize() == 0){
+				continue;
+			}
+			Job j2 = r.getJob();
+
+			cout << r.getTaskName() << " is " << j2.getCustomer() << j2.getProduct() << endl;
+
+			if(r.isSink()){
+				cout << "Job came " << r.getTaskName() << " is a sink" << endl;
+				continue;
+			}
+			bool some = false;
+
+			if(r.getInstaller()){
+				cout << r.getTaskName() << " is an Installer" << endl;
+
+				for(size_t i = 0; i < j2.getItemSize(); i++){
+					if(j2.Installed(i)){
+						continue;
+					}
+					string itemName = j2.getItemNumber(i);
+					Item* iptr = im.FindItem(itemName);
+					if(r.getTaskName() == iptr->getInstaller()){
+						j2.Installed(i, true);
+						some = true;
+						time++;
+						cout << r.getTaskName() << " installed " << itemName << endl;
+						break;
+					}
+				}
+			}
+
+			if(r.getRemover()){
+				cout << r.getTaskName() << " is a remover" << endl;
+
+				for(size_t i = j2.getItemSize() - 1; i >= 0; i--){
+					if(!j2.Installed(i)){
+						continue;
+					}
+				
+				string itemName = j2.getItemNumber(i);
+				Item* iptr = im.FindItem(itemName);
+				if(r.getTaskName() == iptr->getRemover()){
+					j2.Installed(i, false);
+					some = true;
+					time++;
+					cout<< r.getTaskName() << " removed"<< itemName << endl;
+					break;
+				}
+				}
+			}
+				auto mPass = [&]{
+					string pass = r.getTaskPass();
+					cout << "moving job to pass machine " << pass << endl;
+					for(auto &&r2 : machineList){
+						if(r2.getTaskName() == pass){
+							r2.addJob(j2);
+							break;
+						}
+					}
+				};
+
+				auto mFail = [&]{
+					string fail = r.getTaskfail();
+					cout << "moving job to fail " << fail << endl;
+					for(auto &r2 : machineList){
+						if(r2.getTaskName() == fail){
+							r2.addJob(j2);
+							break;
+						}
+					}
+				};
+
+
+			if(!some){
+				mPass();
+				continue;
+			}
+			if(r.getTaskfail().empty()){
+				mPass();
+				continue;
+			}
+			if(rand() & 1){
+				mPass();
+				continue;
+			}else{
+				mFail();
+				continue;
+			}
+		}
+	
+	}		
+	std::cout << "Task is done" << endl;
+	std::cout << "time is: " << time << endl;
+
+	}//end of ctor
+
+};
+
+
+
+
+int main(int argc, char* argv[])
+{
+        try {
+                if (argc != 5){
+                        throw string("Usage: ") + argv[0] + " csv-date-file csv=separator-character";}
+                string filenameItem = string(argv[1]);
+        	string filenameOrder = string(argv[2]);
+		string filenameTask = string(argv[3]);
+		char delimiter = argv[4][0];
+                
+                vector< vector<string> > csvItemData;
+                vector< vector<string> > csvOrderData; 
+		vector< vector<string> > csvTaskData;
+		
+		csvRead(filenameItem, delimiter, csvItemData);
+                csvRead(filenameOrder, delimiter, csvOrderData);
+		csvRead(filenameTask, delimiter, csvTaskData);
+
+		//csvPrint(csvData);
+		ItemManager im(csvItemData);
+		im.print();
+		im.graph(filenameItem);
+
+		OrderManager om(csvOrderData);
+		om.print();
+		om.graph(filenameOrder);
+
+                TaskManager tm(csvTaskData);
+                tm.print();
+                tm.graph(filenameTask);
+        	bool GoodToGo = true;
+		cout << "Item validate check" << endl;
+	
+	try{
+		im.IntegrityCheck(tm);
+	}
+        catch (string& e) {
+		GoodToGo = false;
+                cerr << e << "\n";
+       }
+	std:: cout << "Order validate check" << endl;
+	try{
+		om.IntegrityCheck(im);
+	}catch(string& e){
+		GoodToGo = false;
+		cerr << e << endl;
+	}
+
+	cout << "Task validate check" << endl;
+	try{
+		tm.IntegrityCheck();
+	}catch(string& e){
+		GoodToGo = false;
+		cerr << e << endl;
+	}
+	
+	if(GoodToGo == false){
+		cerr << "PROBLEM WITH DATA" << endl;
+		exit(1);
+	}else{
+		cout << "DATA IS GOOD" << endl;
+	}
+	}catch(string& e){
+		cerr << e << endl;
+		return 99;
+	}
+	return 0;
+}
+
